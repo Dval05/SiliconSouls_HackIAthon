@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 export default function Chat({ idPlan }) {
   const [mensajes, setMensajes] = useState([
@@ -59,7 +60,9 @@ export default function Chat({ idPlan }) {
                 ? 'bg-blue-600 text-white rounded-br-none' 
                 : 'bg-white text-gray-800 border border-gray-200 shadow-sm rounded-bl-none'
             }`}>
-              <p className="whitespace-pre-wrap">{msg.texto}</p>
+              <div className="markdown-body">
+                <ReactMarkdown>{msg.texto}</ReactMarkdown>
+              </div>
             </div>
           </div>
         ))}
