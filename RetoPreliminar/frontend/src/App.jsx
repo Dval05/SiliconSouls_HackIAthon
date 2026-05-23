@@ -14,7 +14,10 @@ function App() {
         <h1 className="text-xl font-bold">Estimador Médico IA</h1>
         {userSession && (
           <div className="flex items-center gap-4">
-            <span className="text-sm">Hola, {userSession.nombres}</span>
+            <span className="text-sm">
+              Hola, {userSession.nombres}
+              {userSession.nombre_plan ? ` | Plan: ${userSession.nombre_plan}` : ''}
+            </span>
             <button 
               onClick={() => setUserSession(null)}
               className="text-xs bg-blue-800 px-3 py-1 rounded hover:bg-blue-900 transition"

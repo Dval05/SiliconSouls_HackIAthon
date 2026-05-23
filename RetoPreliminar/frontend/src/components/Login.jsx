@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 export default function Login({ onLoginSuccess, onToggleView }) {
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -12,7 +13,7 @@ export default function Login({ onLoginSuccess, onToggleView }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cedula, password })
@@ -23,6 +24,7 @@ export default function Login({ onLoginSuccess, onToggleView }) {
       if (response.ok && data.success) {
         onLoginSuccess({
           id_plan: data.id_plan,
+          nombre_plan: data.nombre_plan,
           nombres: data.nombres
         });
       } else {

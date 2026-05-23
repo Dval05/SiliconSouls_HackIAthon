@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export default function Register({ onToggleView }) {
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [formData, setFormData] = useState({
     cedula: '',
     password: '',
@@ -18,7 +19,7 @@ export default function Register({ onToggleView }) {
   useEffect(() => {
     const fetchPlanes = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/auth/planes');
+        const response = await fetch(`${API_BASE}/api/auth/planes`);
         if (response.ok) {
           const data = await response.json();
           setPlanes(data);
@@ -45,7 +46,7 @@ export default function Register({ onToggleView }) {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/register', {
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

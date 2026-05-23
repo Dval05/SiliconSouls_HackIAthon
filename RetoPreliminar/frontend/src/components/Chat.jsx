@@ -2,11 +2,18 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 export default function Chat({ idPlan }) {
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const sugerencias = [
+    'Tengo un golpe en el brazo y me duele bastante.',
+    'Me duele el estómago y me siento muy mal.',
+    'Siento mareo y dolor de cabeza desde ayer.'
+  ];
   const [mensajes, setMensajes] = useState([
     { rol: 'bot', texto: 'Hola. Cuéntame, ¿qué síntomas tienes o qué especialidad buscas?' }
   ]);
   const [input, setInput] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [opcionesClinicas, setOpcionesClinicas] = useState([]);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll al último mensaje
@@ -17,18 +24,30 @@ export default function Chat({ idPlan }) {
     scrollToBottom();
   }, [mensajes]);
 
-  const enviarMensaje = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const extraerOpcionesClinicas = (texto) => {
+    const regex = /Hospital:\s*(.*?)\s*\|\s*Copago:\s*\$?([0-9.,]+)/g;
+    const opciones = [];
+    let match;
+    while ((match = regex.exec(texto)) !== null) {
+      opciones.push({
+        nombre: match[1].trim(),
+        copago: match[2].trim()
+      });
+    }
+    return opciones;
+  };
 
-    const mensajeUsuario = input;
+  const enviarTexto = async (texto) => {
+    if (!texto.trim()) return;
+    const mensajeUsuario = texto;
     // Agregar el mensaje del usuario a la pantalla
     setMensajes(prev => [...prev, { rol: 'user', texto: mensajeUsuario }]);
     setInput('');
+    setOpcionesClinicas([]);
     setCargando(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -39,13 +58,24 @@ export default function Chat({ idPlan }) {
 
       const data = await response.json();
       
+      const opciones = extraerOpcionesClinicas(data.respuesta || '');
       // Agregar la respuesta del bot
       setMensajes(prev => [...prev, { rol: 'bot', texto: data.respuesta }]);
+      setOpcionesClinicas(opciones);
     } catch (err) {
       setMensajes(prev => [...prev, { rol: 'bot', texto: 'Hubo un error de conexión con el agente médico.' }]);
     } finally {
       setCargando(false);
     }
+  };
+
+  const manejarSeleccionClinica = (opcion) => {
+    enviarTexto(`Quiero el contacto de ${opcion.nombre}.`);
+  };
+
+  const enviarMensaje = (e) => {
+    e.preventDefault();
+    enviarTexto(input);
   };
 
   return (
@@ -75,6 +105,40 @@ export default function Chat({ idPlan }) {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {mensajes.length === 1 && !cargando && (
+        <div className="px-4 pb-3 bg-slate-50 border-t border-gray-200">
+          <div className="flex flex-wrap gap-2">
+            {sugerencias.map((texto) => (
+              <button
+                key={texto}
+                type="button"
+                onClick={() => setInput(texto)}
+                className="text-sm bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-full hover:border-blue-400 hover:text-blue-700 transition"
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {opcionesClinicas.length > 0 && (
+        <div className="px-4 pb-3 bg-slate-50 border-t border-gray-200">
+          <div className="flex flex-wrap gap-2">
+            {opcionesClinicas.map((opcion) => (
+              <button
+                key={`${opcion.nombre}-${opcion.copago}`}
+                type="button"
+                onClick={() => manejarSeleccionClinica(opcion)}
+                className="text-sm bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-full hover:border-blue-400 hover:text-blue-700 transition"
+              >
+                {opcion.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input de chat */}
       <form onSubmit={enviarMensaje} className="p-4 bg-white border-t border-gray-200 flex gap-2">

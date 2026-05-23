@@ -14,6 +14,7 @@ def login(request: LoginRequest):
         success=True,
         mensaje=resultado["mensaje"],
         id_plan=resultado["id_plan"],
+        nombre_plan=resultado.get("nombre_plan"),
         nombres=resultado["nombres"]
     )
 

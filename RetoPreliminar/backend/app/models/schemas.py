@@ -8,6 +8,7 @@ class LoginResponse(BaseModel):
     success: bool
     mensaje: str
     id_plan: str | None = None
+    nombre_plan: str | None = None
     nombres: str | None = None
 
 class ChatRequest(BaseModel):

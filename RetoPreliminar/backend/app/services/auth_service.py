@@ -21,20 +21,27 @@ def verificar_credenciales(cedula: str, password_plano: str):
         paciente_response = supabase.table("pacientes").select("id_plan, nombres_pacientes, apellidos_pacientes").eq("id_usuarios", id_usuario).execute()
         
         if not paciente_response.data:
-             return {"success": False, "mensaje": "Perfil de paciente no encontrado."}
-             
+            return {"success": False, "mensaje": "Perfil de paciente no encontrado."}
+            
         paciente = paciente_response.data[0]
+        plan_nombre = None
+        plan_res = supabase.table("planes_seguro").select("nombre_plan").eq(
+            "id_plan", paciente["id_plan"]
+        ).limit(1).execute()
+        if plan_res.data:
+            plan_nombre = plan_res.data[0]["nombre_plan"]
         
         return {
             "success": True, 
             "mensaje": "Login exitoso", 
             "id_plan": paciente["id_plan"],
+            "nombre_plan": plan_nombre,
             "nombres": f"{paciente['nombres_pacientes']} {paciente['apellidos_pacientes']}"
         }
         
     except Exception as e:
         return {"success": False, "mensaje": f"Error en el servidor: {str(e)}"}
-
+    
 # --- NUEVA FUNCIÓN DE REGISTRO SECUENCIAL ---
 def registrar_usuario(datos: dict):
     try:
