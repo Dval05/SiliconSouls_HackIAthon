@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Login from './components/Login';
 import Register from './components/Register';
 import Chat from './components/Chat';
@@ -6,6 +6,30 @@ import Chat from './components/Chat';
 function App() {
   const [userSession, setUserSession] = useState(null);
   const [currentView, setCurrentView] = useState('login'); // 'login' o 'register'
+
+  useEffect(() => {
+    const savedSession = localStorage.getItem('userSession');
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (parsed && parsed.id_plan) {
+          setUserSession(parsed);
+        }
+      } catch {
+        localStorage.removeItem('userSession');
+      }
+    }
+  }, []);
+
+  const handleLoginSuccess = (session) => {
+    setUserSession(session);
+    localStorage.setItem('userSession', JSON.stringify(session));
+  };
+
+  const handleLogout = () => {
+    setUserSession(null);
+    localStorage.removeItem('userSession');
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -19,7 +43,7 @@ function App() {
               {userSession.nombre_plan ? ` | Plan: ${userSession.nombre_plan}` : ''}
             </span>
             <button 
-              onClick={() => setUserSession(null)}
+              onClick={handleLogout}
               className="text-xs bg-blue-800 px-3 py-1 rounded hover:bg-blue-900 transition"
             >
               Salir
@@ -32,7 +56,7 @@ function App() {
       <main className="max-w-4xl mx-auto p-4 flex-grow flex flex-col justify-center">
         {!userSession ? (
           currentView === 'login' ? (
-            <Login onLoginSuccess={setUserSession} onToggleView={setCurrentView} />
+            <Login onLoginSuccess={handleLoginSuccess} onToggleView={setCurrentView} />
           ) : (
             <Register onToggleView={setCurrentView} />
           )
