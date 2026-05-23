@@ -16,3 +16,15 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     respuesta: str
+
+class RegisterRequest(BaseModel):
+    cedula: str
+    password: str
+    nombres: str
+    apellidos: str
+    fecha_nacimiento: str # Formato YYYY-MM-DD
+    id_plan: str
+
+class StandardResponse(BaseModel):
+    success: bool
+    mensaje: str

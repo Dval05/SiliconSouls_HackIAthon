@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import Login from './components/Login';
+import Register from './components/Register';
 import Chat from './components/Chat';
 
 function App() {
-  // Estado para guardar la sesión del usuario
   const [userSession, setUserSession] = useState(null);
+  const [currentView, setCurrentView] = useState('login'); // 'login' o 'register'
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -27,7 +28,11 @@ function App() {
       {/* Renderizado Condicional */}
       <main className="max-w-4xl mx-auto p-4 flex-grow flex flex-col justify-center">
         {!userSession ? (
-          <Login onLoginSuccess={setUserSession} />
+          currentView === 'login' ? (
+            <Login onLoginSuccess={setUserSession} onToggleView={setCurrentView} />
+          ) : (
+            <Register onToggleView={setCurrentView} />
+          )
         ) : (
           <Chat idPlan={userSession.id_plan} />
         )}

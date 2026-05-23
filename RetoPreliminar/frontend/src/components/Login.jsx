@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, onToggleView }) {
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -12,7 +12,6 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      // Ajusta el puerto 8000 si tu backend corre en otro lado
       const response = await fetch('http://localhost:8000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -22,7 +21,6 @@ export default function Login({ onLoginSuccess }) {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Pasamos los datos al componente App
         onLoginSuccess({
           id_plan: data.id_plan,
           nombres: data.nombres
@@ -80,6 +78,12 @@ export default function Login({ onLoginSuccess }) {
           {loading ? 'Verificando...' : 'Entrar'}
         </button>
       </form>
+
+      <div className="mt-4 text-center">
+        <button onClick={() => onToggleView('register')} className="text-sm text-blue-600 hover:underline">
+          ¿No tienes cuenta? Regístrate aquí
+        </button>
+      </div>
     </div>
   );
 }
