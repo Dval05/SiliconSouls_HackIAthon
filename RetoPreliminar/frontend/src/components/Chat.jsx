@@ -49,23 +49,48 @@ export default function Chat({ idPlan, onActivity, onAgentBusy }) {
     onAgentBusy?.(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
+
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          mensaje: mensajeUsuario, 
-          id_plan: idPlan 
-        })
+        body: JSON.stringify({
+          mensaje: mensajeUsuario,
+          id_plan: idPlan
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       const data = await response.json();
-      
-      const opciones = extraerOpcionesClinicas(data.respuesta || '');
+
+      if (!response.ok) {
+        setMensajes(prev => [...prev, {
+          rol: 'bot',
+          texto: 'Nuestro agente no esta disponible por el momento. Intenta nuevamente en unos minutos.'
+        }]);
+        return;
+      }
+
+      const respuesta = data.respuesta || '';
+      if (respuesta.startsWith('Error al procesar')) {
+        setMensajes(prev => [...prev, {
+          rol: 'bot',
+          texto: 'Nuestro agente no esta disponible por el momento. Intenta nuevamente en unos minutos.'
+        }]);
+        return;
+      }
+
+      const opciones = extraerOpcionesClinicas(respuesta);
       // Agregar la respuesta del bot
-      setMensajes(prev => [...prev, { rol: 'bot', texto: data.respuesta }]);
+      setMensajes(prev => [...prev, { rol: 'bot', texto: respuesta }]);
       setOpcionesClinicas(opciones);
     } catch (err) {
-      setMensajes(prev => [...prev, { rol: 'bot', texto: 'Hubo un error de conexión con el agente médico.' }]);
+      const mensaje = err?.name === 'AbortError'
+        ? 'Nuestro agente esta fuera de servicio por alta demanda. Intenta nuevamente en unos minutos.'
+        : 'Nuestro agente no esta disponible por el momento. Intenta nuevamente en unos minutos.';
+      setMensajes(prev => [...prev, { rol: 'bot', texto: mensaje }]);
     } finally {
       setCargando(false);
       onAgentBusy?.(false);
