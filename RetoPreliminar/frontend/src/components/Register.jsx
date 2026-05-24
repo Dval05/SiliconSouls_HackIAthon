@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function Register({ onToggleView }) {
+export default function Register({ onToggleView, onActivity }) {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [formData, setFormData] = useState({
     cedula: '',
@@ -38,6 +38,7 @@ export default function Register({ onToggleView }) {
   }, []);
 
   const handleChange = (e) => {
+    onActivity?.();
     const { name, value } = e.target;
 
     if (name === 'cedula') {
@@ -65,6 +66,7 @@ export default function Register({ onToggleView }) {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    onActivity?.();
     setMensaje({ texto: '', tipo: '' });
     setLoading(true);
 

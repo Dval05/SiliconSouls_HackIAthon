@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function Login({ onLoginSuccess, onToggleView }) {
+export default function Login({ onLoginSuccess, onToggleView, onActivity }) {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
@@ -10,6 +10,7 @@ export default function Login({ onLoginSuccess, onToggleView }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    onActivity?.();
     setError('');
     setLoading(true);
 
@@ -67,6 +68,7 @@ export default function Login({ onLoginSuccess, onToggleView }) {
               const numeric = raw.replace(/\D/g, '').slice(0, 10);
               setCedula(numeric);
               setCedulaWarning(raw !== numeric ? 'Solo se permiten números.' : '');
+              onActivity?.();
             }}
             required
           />
@@ -82,7 +84,10 @@ export default function Login({ onLoginSuccess, onToggleView }) {
             className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             placeholder="••••••••"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              onActivity?.();
+            }}
             required
           />
         </div>

@@ -5,8 +5,17 @@ import time
 
 from google.genai import types
 
-from app.core.config import GEMINI_MODEL, GEMINI_FALLBACK_MODEL, genai_client, supabase
+from app.core.config import (
+    GEMINI_MODEL,
+    GEMINI_FALLBACK_MODEL,
+    GEMINI_FALLBACK_MODELS,
+    genai_client,
+    supabase,
+)
 from app.utils.prompts import SYSTEM_PROMPT
+
+_CACHE_TTL_SECONDS = 300
+_response_cache = {}
 
 # 1. Definir la herramienta (Tool) que Gemini usará
 def buscar_coberturas_bd(nombre_especialidad: str, id_plan: str) -> str:
@@ -84,6 +93,11 @@ def buscar_contacto_hospital(nombre_hospital: str) -> str:
 
 def procesar_mensaje(mensaje_usuario: str, id_plan: str):
     try:
+        cache_key = _cache_key(mensaje_usuario, id_plan)
+        cached = _cache_get(cache_key)
+        if cached:
+            return cached
+
         plan_nombre = id_plan
         plan_res = supabase.table("planes_seguro").select("nombre_plan").eq(
             "id_plan", id_plan
@@ -104,9 +118,7 @@ def procesar_mensaje(mensaje_usuario: str, id_plan: str):
             ),
         )
 
-        modelos = [GEMINI_MODEL]
-        if GEMINI_FALLBACK_MODEL and GEMINI_FALLBACK_MODEL != GEMINI_MODEL:
-            modelos.append(GEMINI_FALLBACK_MODEL)
+        modelos = _lista_modelos()
 
         last_error = None
         for idx, modelo in enumerate(modelos):
@@ -117,7 +129,9 @@ def procesar_mensaje(mensaje_usuario: str, id_plan: str):
                         contents=prompt_enriquecido,
                         config=config,
                     )
-                    return respuesta.text or "No pude generar una respuesta en este momento."
+                    respuesta_texto = respuesta.text or "No pude generar una respuesta en este momento."
+                    _cache_set(cache_key, respuesta_texto)
+                    return respuesta_texto
                 except Exception as inner_error:
                     detalle_error = str(inner_error)
                     last_error = detalle_error
@@ -137,14 +151,27 @@ def procesar_mensaje(mensaje_usuario: str, id_plan: str):
                         continue
                     raise
 
+        if _es_cuota_agotada(last_error):
+            respuesta_texto = _procesar_sin_ai(mensaje_usuario, id_plan, plan_nombre)
+            _cache_set(cache_key, respuesta_texto)
+            return respuesta_texto
+
         if _error_sin_tools(last_error):
-            return _procesar_sin_tools(mensaje_usuario, id_plan, plan_nombre)
+            respuesta_texto = _procesar_sin_tools(mensaje_usuario, id_plan, plan_nombre)
+            _cache_set(cache_key, respuesta_texto)
+            return respuesta_texto
 
         return f"Error al procesar tu consulta: {last_error}"
     except Exception as e:
         detalle_error = str(e)
+        if _es_cuota_agotada(detalle_error):
+            respuesta_texto = _procesar_sin_ai(mensaje_usuario, id_plan, plan_nombre)
+            _cache_set(cache_key, respuesta_texto)
+            return respuesta_texto
         if _error_sin_tools(detalle_error):
-            return _procesar_sin_tools(mensaje_usuario, id_plan, plan_nombre)
+            respuesta_texto = _procesar_sin_tools(mensaje_usuario, id_plan, plan_nombre)
+            _cache_set(cache_key, respuesta_texto)
+            return respuesta_texto
         if "RESOURCE_EXHAUSTED" in detalle_error or "429" in detalle_error:
             return (
                 "El servicio de IA supero el limite temporal de uso. "
@@ -161,6 +188,12 @@ def _error_sin_tools(detalle_error: str) -> bool:
         or "Unknown name \"tools\"" in detalle_error
         or "Unknown name \"toolConfig\"" in detalle_error
     )
+
+
+def _es_cuota_agotada(detalle_error: str) -> bool:
+    if not detalle_error:
+        return False
+    return "RESOURCE_EXHAUSTED" in detalle_error or "429" in detalle_error
 
 
 def _extraer_especialidad(mensaje_usuario: str) -> str:
@@ -200,9 +233,7 @@ def _limpiar_especialidad(texto: str) -> str:
 
 
 def _generar_texto_simple(prompt: str) -> str:
-    modelos = [GEMINI_MODEL]
-    if GEMINI_FALLBACK_MODEL and GEMINI_FALLBACK_MODEL != GEMINI_MODEL:
-        modelos.append(GEMINI_FALLBACK_MODEL)
+    modelos = _lista_modelos()
 
     last_error = None
     for idx, modelo in enumerate(modelos):
@@ -234,8 +265,54 @@ def _generar_texto_simple(prompt: str) -> str:
     raise RuntimeError(last_error or "Error desconocido al generar contenido")
 
 
+def _lista_modelos() -> list[str]:
+    modelos = [GEMINI_MODEL]
+    if GEMINI_FALLBACK_MODEL and GEMINI_FALLBACK_MODEL != GEMINI_MODEL:
+        modelos.append(GEMINI_FALLBACK_MODEL)
+    for modelo in GEMINI_FALLBACK_MODELS:
+        if modelo and modelo not in modelos:
+            modelos.append(modelo)
+    return modelos
+
+
+def _cache_key(mensaje_usuario: str, id_plan: str) -> str:
+    limpio = " ".join(mensaje_usuario.strip().lower().split())
+    return f"{id_plan}::{limpio}"
+
+
+def _cache_get(key: str) -> str | None:
+    item = _response_cache.get(key)
+    if not item:
+        return None
+    timestamp, value = item
+    if time.time() - timestamp > _CACHE_TTL_SECONDS:
+        _response_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value: str) -> None:
+    _response_cache[key] = (time.time(), value)
+
+
+def _es_consulta_medica(mensaje_usuario: str) -> bool:
+    prompt = (
+        "Responde SOLO SI o NO. El mensaje esta relacionado con salud, sintomas, "
+        "especialidades medicas, hospitales, copagos o seguros de salud? Mensaje: "
+        f"{mensaje_usuario}"
+    )
+    texto = _generar_texto_simple(prompt).strip().upper()
+    return texto.startswith("SI")
+
+
 def _procesar_sin_tools(mensaje_usuario: str, id_plan: str, plan_nombre: str) -> str:
     try:
+        if not _es_consulta_medica(mensaje_usuario):
+            return (
+                "Lo siento, ese tema no esta dentro de mi conocimiento. "
+                "Puedo ayudarte con dudas medicas, sintomas, especialidades y copagos."
+            )
+
         if re.search(r"contacto|telefono|tel[eé]fono|llamar|numero", mensaje_usuario, re.IGNORECASE):
             hospital = _extraer_hospital(mensaje_usuario)
             if not hospital:
@@ -247,28 +324,58 @@ def _procesar_sin_tools(mensaje_usuario: str, id_plan: str, plan_nombre: str) ->
             return "No pude identificar la especialidad. Puedes describir los sintomas con mas detalle?"
 
         resultados = buscar_coberturas_bd(especialidad, id_plan)
+        if resultados.startswith("No se encontró la especialidad"):
+            return (
+                "Lo siento, ese tema no esta dentro de mi conocimiento. "
+                "Puedo ayudarte con dudas médicas, síntomas , especialidades, seguros y copagos."
+            )
         if resultados.startswith("No se") or resultados.startswith("El plan") or resultados.startswith("Error"):
             return resultados
-
-        opciones = re.findall(
-            r"Hospital:\s*(.*?)\s*\|\s*Copago:\s*\$?([0-9]+(?:\.[0-9]+)?)",
-            resultados,
-        )
-        if not opciones:
-            return resultados
-
-        mejor_hospital, mejor_copago = min(opciones, key=lambda item: float(item[1]))
-
-        lineas_opciones = "\n\n".join(
-            f"Hospital: {nombre} | Copago: ${copago}" for nombre, copago in opciones
-        )
-
-        return (
-            "Lamento mucho que te sientas mal. El dolor en esa zona suele ser evaluado por la "
-            f"especialidad de **{especialidad}**.\n\n"
-            f"Para tu plan **{plan_nombre}**, estas son las opciones disponibles con sus copagos:\n\n"
-            f"\n {lineas_opciones}\n\n"
-            f"La opcion mas economica es **{mejor_hospital}** con copago **${mejor_copago}**."
-        )
+        return _formatear_respuesta_opciones(especialidad, resultados, plan_nombre)
     except Exception as e:
         return f"Error al procesar tu consulta: {str(e)}"
+
+
+def _procesar_sin_ai(mensaje_usuario: str, id_plan: str, plan_nombre: str) -> str:
+    if re.search(r"contacto|telefono|tel[eé]fono|llamar|numero", mensaje_usuario, re.IGNORECASE):
+        match = re.search(r"(?:contacto|telefono|tel[eé]fono|llamar|numero)\s*(?:de)?\s*(.+)", mensaje_usuario, re.IGNORECASE)
+        hospital = match.group(1).strip(" .,") if match else ""
+        if not hospital:
+            return "Indica el nombre exacto del hospital para darte el contacto."
+        return buscar_contacto_hospital(hospital)
+
+    match = re.search(r"especialidad\s*(?:de)?\s*([A-Za-zÁÉÍÓÚÑáéíóúñ ]{3,})", mensaje_usuario, re.IGNORECASE)
+    if not match:
+        return (
+            "El servicio de IA esta temporalmente sin cuota. "
+            "Indica la especialidad que buscas, por ejemplo: 'especialidad gastroenterologia'."
+        )
+
+    especialidad = match.group(1).strip()
+    resultados = buscar_coberturas_bd(especialidad, id_plan)
+    if resultados.startswith("No se") or resultados.startswith("El plan") or resultados.startswith("Error"):
+        return resultados
+
+    return _formatear_respuesta_opciones(especialidad, resultados, plan_nombre)
+
+
+def _formatear_respuesta_opciones(especialidad: str, resultados: str, plan_nombre: str) -> str:
+    opciones = re.findall(
+        r"Hospital:\s*(.*?)\s*\|\s*Copago:\s*\$?([0-9]+(?:\.[0-9]+)?)",
+        resultados,
+    )
+    if not opciones:
+        return resultados
+
+    mejor_hospital, mejor_copago = min(opciones, key=lambda item: float(item[1]))
+    lineas_opciones = "\n\n".join(
+        f"Hospital: {nombre} | Copago: ${copago}" for nombre, copago in opciones
+    )
+
+    return (
+        "Lamento mucho que te sientas mal. El dolor en esa zona suele ser evaluado por la "
+        f"especialidad de **{especialidad}**.\n\n"
+        f"Para tu plan **{plan_nombre}**, estas son las opciones disponibles con sus copagos:\n\n"
+        f"\n {lineas_opciones}\n\n"
+        f"La opcion mas económica es **{mejor_hospital}** con copago **${mejor_copago}**."
+    )

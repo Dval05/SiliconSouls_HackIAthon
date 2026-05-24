@@ -6,6 +6,7 @@ import Chat from './components/Chat';
 function App() {
   const [userSession, setUserSession] = useState(null);
   const [currentView, setCurrentView] = useState('login'); // 'login' o 'register'
+  const [agentBusy, setAgentBusy] = useState(false);
   const SESSION_MS = 5 * 60 * 1000;
 
   useEffect(() => {
@@ -13,9 +14,13 @@ function App() {
     if (savedSession) {
       try {
         const parsed = JSON.parse(savedSession);
-        const expiresAt = Number(parsed?.expiresAt || 0);
-        if (parsed && parsed.id_plan && expiresAt > Date.now()) {
-          setUserSession(parsed);
+        const lastActivity = Number(parsed?.lastActivity || 0);
+        if (parsed && parsed.id_plan && lastActivity) {
+          if (Date.now() - lastActivity <= SESSION_MS) {
+            setUserSession(parsed);
+          } else {
+            localStorage.removeItem('userSession');
+          }
         } else {
           localStorage.removeItem('userSession');
         }
@@ -26,25 +31,32 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!userSession?.expiresAt) return;
+    if (!userSession?.lastActivity) return;
 
     const intervalId = setInterval(() => {
-      if (Date.now() >= userSession.expiresAt) {
+      if (!agentBusy && Date.now() - userSession.lastActivity >= SESSION_MS) {
         setUserSession(null);
         localStorage.removeItem('userSession');
       }
     }, 30000);
 
     return () => clearInterval(intervalId);
-  }, [userSession]);
+  }, [agentBusy, userSession]);
 
   const handleLoginSuccess = (session) => {
-    const sessionWithExpiry = {
+    const sessionWithActivity = {
       ...session,
-      expiresAt: Date.now() + SESSION_MS
+      lastActivity: Date.now()
     };
-    setUserSession(sessionWithExpiry);
-    localStorage.setItem('userSession', JSON.stringify(sessionWithExpiry));
+    setUserSession(sessionWithActivity);
+    localStorage.setItem('userSession', JSON.stringify(sessionWithActivity));
+  };
+
+  const handleActivity = () => {
+    if (!userSession) return;
+    const updated = { ...userSession, lastActivity: Date.now() };
+    setUserSession(updated);
+    localStorage.setItem('userSession', JSON.stringify(updated));
   };
 
   const handleLogout = () => {
@@ -77,12 +89,20 @@ function App() {
       <main className="max-w-4xl mx-auto p-4 flex-grow flex flex-col justify-center">
         {!userSession ? (
           currentView === 'login' ? (
-            <Login onLoginSuccess={handleLoginSuccess} onToggleView={setCurrentView} />
+            <Login
+              onLoginSuccess={handleLoginSuccess}
+              onToggleView={setCurrentView}
+              onActivity={handleActivity}
+            />
           ) : (
-            <Register onToggleView={setCurrentView} />
+            <Register onToggleView={setCurrentView} onActivity={handleActivity} />
           )
         ) : (
-          <Chat idPlan={userSession.id_plan} />
+          <Chat
+            idPlan={userSession.id_plan}
+            onActivity={handleActivity}
+            onAgentBusy={setAgentBusy}
+          />
         )}
       </main>
     </div>

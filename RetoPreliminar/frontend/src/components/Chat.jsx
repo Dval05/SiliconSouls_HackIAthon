@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-export default function Chat({ idPlan }) {
+export default function Chat({ idPlan, onActivity, onAgentBusy }) {
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const sugerencias = [
     'Tengo un golpe en el brazo y me duele bastante.',
@@ -40,11 +40,13 @@ export default function Chat({ idPlan }) {
   const enviarTexto = async (texto) => {
     if (!texto.trim()) return;
     const mensajeUsuario = texto;
+    onActivity?.();
     // Agregar el mensaje del usuario a la pantalla
     setMensajes(prev => [...prev, { rol: 'user', texto: mensajeUsuario }]);
     setInput('');
     setOpcionesClinicas([]);
     setCargando(true);
+    onAgentBusy?.(true);
 
     try {
       const response = await fetch(`${API_BASE}/api/chat`, {
@@ -66,10 +68,12 @@ export default function Chat({ idPlan }) {
       setMensajes(prev => [...prev, { rol: 'bot', texto: 'Hubo un error de conexión con el agente médico.' }]);
     } finally {
       setCargando(false);
+      onAgentBusy?.(false);
     }
   };
 
   const manejarSeleccionClinica = (opcion) => {
+    onActivity?.();
     enviarTexto(`Quiero el contacto de ${opcion.nombre}.`);
   };
 
@@ -113,7 +117,10 @@ export default function Chat({ idPlan }) {
               <button
                 key={texto}
                 type="button"
-                onClick={() => setInput(texto)}
+                onClick={() => {
+                  onActivity?.();
+                  setInput(texto);
+                }}
                 className="text-sm bg-white border border-gray-200 text-gray-700 px-3 py-2 rounded-full hover:border-blue-400 hover:text-blue-700 transition"
               >
                 {texto}
@@ -147,7 +154,10 @@ export default function Chat({ idPlan }) {
           className="flex-1 border border-gray-300 rounded-full px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           placeholder="Escribe tus síntomas aquí..."
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            onActivity?.();
+            setInput(e.target.value);
+          }}
           disabled={cargando}
         />
         <button
