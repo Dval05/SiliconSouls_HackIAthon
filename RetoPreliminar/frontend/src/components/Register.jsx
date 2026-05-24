@@ -14,6 +14,7 @@ export default function Register({ onToggleView }) {
   const [planes, setPlanes] = useState([]); // Estado para guardar la lista de planes
   const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
   const [loading, setLoading] = useState(false);
+  const [warnings, setWarnings] = useState({ cedula: '', nombres: '', apellidos: '' });
 
   // Ejecutar al cargar el componente
   useEffect(() => {
@@ -37,13 +38,55 @@ export default function Register({ onToggleView }) {
   }, []);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === 'cedula') {
+      const numeric = value.replace(/\D/g, '').slice(0, 10);
+      setFormData({ ...formData, cedula: numeric });
+      setWarnings(prev => ({
+        ...prev,
+        cedula: value !== numeric ? 'Solo se permiten números.' : ''
+      }));
+      return;
+    }
+
+    if (name === 'nombres' || name === 'apellidos') {
+      const cleaned = value.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ\s]/g, '');
+      setFormData({ ...formData, [name]: cleaned });
+      setWarnings(prev => ({
+        ...prev,
+        [name]: value !== cleaned ? 'Solo se permiten letras.' : ''
+      }));
+      return;
+    }
+
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setMensaje({ texto: '', tipo: '' });
     setLoading(true);
+
+    const campos = [
+      formData.nombres,
+      formData.apellidos,
+      formData.cedula,
+      formData.password,
+      formData.fecha_nacimiento,
+      formData.id_plan
+    ];
+    if (campos.some((valor) => !String(valor || '').trim())) {
+      setMensaje({ texto: 'Todos los campos son obligatorios.', tipo: 'error' });
+      setLoading(false);
+      return;
+    }
+
+    if (formData.cedula.length !== 10) {
+      setMensaje({ texto: 'La cédula debe tener 10 dígitos numéricos.', tipo: 'error' });
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE}/api/auth/register`, {
@@ -84,11 +127,17 @@ export default function Register({ onToggleView }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">Nombres</label>
             <input type="text" name="nombres" value={formData.nombres} onChange={handleChange} required
               className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
+            {warnings.nombres && (
+              <p className="text-xs text-amber-600 mt-1">{warnings.nombres}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Apellidos</label>
             <input type="text" name="apellidos" value={formData.apellidos} onChange={handleChange} required
               className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
+            {warnings.apellidos && (
+              <p className="text-xs text-amber-600 mt-1">{warnings.apellidos}</p>
+            )}
           </div>
         </div>
 
@@ -96,6 +145,9 @@ export default function Register({ onToggleView }) {
           <label className="block text-sm font-medium text-gray-700 mb-1">Cédula</label>
           <input type="text" name="cedula" value={formData.cedula} onChange={handleChange} required
             className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
+          {warnings.cedula && (
+            <p className="text-xs text-amber-600 mt-1">{warnings.cedula}</p>
+          )}
         </div>
 
         <div>

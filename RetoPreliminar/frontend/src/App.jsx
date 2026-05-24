@@ -6,14 +6,18 @@ import Chat from './components/Chat';
 function App() {
   const [userSession, setUserSession] = useState(null);
   const [currentView, setCurrentView] = useState('login'); // 'login' o 'register'
+  const SESSION_MS = 5 * 60 * 1000;
 
   useEffect(() => {
     const savedSession = localStorage.getItem('userSession');
     if (savedSession) {
       try {
         const parsed = JSON.parse(savedSession);
-        if (parsed && parsed.id_plan) {
+        const expiresAt = Number(parsed?.expiresAt || 0);
+        if (parsed && parsed.id_plan && expiresAt > Date.now()) {
           setUserSession(parsed);
+        } else {
+          localStorage.removeItem('userSession');
         }
       } catch {
         localStorage.removeItem('userSession');
@@ -21,9 +25,26 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!userSession?.expiresAt) return;
+
+    const intervalId = setInterval(() => {
+      if (Date.now() >= userSession.expiresAt) {
+        setUserSession(null);
+        localStorage.removeItem('userSession');
+      }
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [userSession]);
+
   const handleLoginSuccess = (session) => {
-    setUserSession(session);
-    localStorage.setItem('userSession', JSON.stringify(session));
+    const sessionWithExpiry = {
+      ...session,
+      expiresAt: Date.now() + SESSION_MS
+    };
+    setUserSession(sessionWithExpiry);
+    localStorage.setItem('userSession', JSON.stringify(sessionWithExpiry));
   };
 
   const handleLogout = () => {

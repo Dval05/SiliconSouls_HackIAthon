@@ -5,12 +5,19 @@ export default function Login({ onLoginSuccess, onToggleView }) {
   const [cedula, setCedula] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [cedulaWarning, setCedulaWarning] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    if (cedula.length !== 10) {
+      setError('La cédula debe tener 10 dígitos numéricos.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
@@ -55,9 +62,17 @@ export default function Login({ onLoginSuccess, onToggleView }) {
             className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             placeholder="Ej: 1718293045"
             value={cedula}
-            onChange={(e) => setCedula(e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              const numeric = raw.replace(/\D/g, '').slice(0, 10);
+              setCedula(numeric);
+              setCedulaWarning(raw !== numeric ? 'Solo se permiten números.' : '');
+            }}
             required
           />
+          {cedulaWarning && (
+            <p className="text-xs text-amber-600 mt-1">{cedulaWarning}</p>
+          )}
         </div>
         
         <div>
